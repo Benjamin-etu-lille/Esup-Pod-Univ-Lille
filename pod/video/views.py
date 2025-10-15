@@ -2,10 +2,12 @@
 
 from concurrent import futures
 import os
+import base64
 
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
 from django.core.handlers.wsgi import WSGIRequest
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count, F, Q, Case, When, Value, BooleanField
 from django.db.models.functions import Concat
@@ -28,6 +30,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.db.models import Sum, Min
+
 
 
 # from django.contrib.auth.hashers import check_password
@@ -1319,6 +1322,19 @@ def video_edit(request, slug=None):
         )
         if form.is_valid():
             video = save_video_form(request, form)
+
+            thumbnail_data_url = request.POST.get('thumbnail_data_url')
+            if thumbnail_data_url and thumbnail_data_url.startswith('data:image'):
+                try:
+                    image_format, image_str = thumbnail_data_url.split(';base64,')
+                    ext = image_format.split('/')[-1]
+                    data = ContentFile(base64.b64decode(image_str), name=f'thumb_{video.slug}.{ext}')
+                    
+                    video.thumbnail = data
+                    video.save(update_fields=['thumbnail'])
+                except Exception:
+                    pass
+
             messages.add_message(
                 request, messages.INFO, _("The changes have been saved.")
             )
@@ -1336,7 +1352,11 @@ def video_edit(request, slug=None):
     return render(
         request,
         "videos/video_edit.html",
-        {"form": form, "listTheme": json.dumps(get_list_theme_in_form(form))},
+        {
+            "form": form,
+            "listTheme": json.dumps(get_list_theme_in_form(form)),
+            "video": video,  
+        },
     )
 
 
